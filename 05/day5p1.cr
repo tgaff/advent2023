@@ -7,7 +7,6 @@ module Options
   @@file_name = ""
 end
 
-
 parser = OptionParser.parse do |parser|
   parser.banner = "Almanac App"
 
@@ -122,10 +121,8 @@ def find_location_for_seed_id(seed_id, lines)
 
     id = this_batches_found_mapping.associated_id
   end
-
 end
 
-# puts find_location_for_seed_id(Records.seed_ids.first, lines)
 alias SeedLocationMap = StaticArray(Int64, 2)
 channel = Channel(SeedLocationMap).new() # process each segment in parallel
 

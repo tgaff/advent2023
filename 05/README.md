@@ -1,8 +1,9 @@
 # part1
+
 ## build
 
 ```
-./build.sh
+./build_p1.sh
 ```
 
 ## run
@@ -26,4 +27,12 @@ crystal day5p1.cr -- -f test_input.txt
 in a change loop:
 ```
 watchman-make -p '**/*.cr' --run='crystal day5p1.cr -- -f test_input.txt'
+```
+
+# part2
+
+## build
+
+```
+./build_p2.sh
 ```

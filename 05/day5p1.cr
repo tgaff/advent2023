@@ -35,24 +35,6 @@ def get_mapping_type_from_str(line : String)
   return line.split(" ")[0].split("-to-")
 end
 
-
-def process_group_mapping(type : String, associated_type : String, line : String)
-  line_split = line.split(" ").map { |s| s.strip }
-  # puts "working line #{line_split}"
-  number_of_times = line_split[2].to_i
-  current_model_type = type
-  current_model_first_id = line_split[1].to_i
-  to_type = associated_type
-  to_model_first_id = line_split[0].to_i
-
-  number_of_times.times do |n|
-    model = ModelThing.new(current_model_type, to_type, current_model_first_id + n)
-    model.associated_id = to_model_first_id + n
-
-    Records.mappings[current_model_type].save model
-  end
-end
-
 struct Mapping
   property id, associated_id
 
@@ -62,10 +44,10 @@ end
 
 def find_mapping_for_id(find_id : Int64, line)
   line_split = line.split(" ").map { |s| s.strip }
-  puts "working line #{line_split}"
+  # puts "working line #{line_split}"
   number_of_times = line_split[2].to_i
-  current_model_first_id = line_split[1].to_i
-  to_model_first_id = line_split[0].to_i
+  current_model_first_id = line_split[1].to_i64
+  to_model_first_id = line_split[0].to_i64
 
   number_of_times.times do |n|
     id = (current_model_first_id + n)
@@ -88,9 +70,7 @@ lines = content.split("\n")
 current_chunk = [] of String
 
 alias ArrString = Array(String)
-############################################
-# this now only processes up through a limit like ["seed", "soil"]
-############################################
+
 def process_file_lines(lines, work_chunk : ArrString, find_id : Int64)
   current_chunk = [] of String
   lines.each do |line|
@@ -128,7 +108,7 @@ def find_location_for_seed_id(seed_id, lines)
 
   Records::TYPES.each.with_index do |from_type, i|
     to_type = Records::TYPES[i + 1]
-    puts "looking for match at [#{from_type}, #{to_type}] for #{id}"
+    # puts "looking for match at [#{from_type}, #{to_type}] for #{id}"
     this_batches_found_mapping = process_file_lines(lines, [from_type, to_type], id)
 
     if to_type == Records::TYPES.last
@@ -146,9 +126,29 @@ def find_location_for_seed_id(seed_id, lines)
 end
 
 # puts find_location_for_seed_id(Records.seed_ids.first, lines)
-Records.seed_ids.each do |seed_id|
-  puts "\n\n"
-  loc_id = find_location_for_seed_id(seed_id, lines)
+alias SeedLocationMap = StaticArray(Int64, 2)
+channel = Channel(SeedLocationMap).new() # process each segment in parallel
 
-  puts "the location for seed #{seed_id} is location #{loc_id}"
+Records.seed_ids.each do |seed_id|
+  spawn do
+    puts "\n\n"
+    loc_id = find_location_for_seed_id(seed_id, lines)
+
+    puts "the location for seed #{seed_id} is location #{loc_id}"
+    results = Int64.static_array(seed_id || 0, loc_id|| 0)
+    channel.send(results)
+  end
+end
+
+results = [] of SeedLocationMap
+Records.seed_ids.size.times do
+  res = channel.receive
+  results.push res
+  puts "received response #{res[0]} => #{res[1]}"
+end
+
+puts "___________________________"
+puts "sorted by location id"
+results.sort {|res_a, res_b| res_a[1] <=> res_b[1] }.each do |res|
+  puts "seed #{res[0]} corresponds to location #{res[1]}"
 end

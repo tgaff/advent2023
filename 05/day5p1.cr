@@ -1,4 +1,6 @@
 require "option_parser"
+require "./records"
+require "./seed_finder"
 
 module Options
   class_property file_name
@@ -17,21 +19,6 @@ end
 
 parser.parse
 
-class ModelThing
-  getter id : Int32?
-  property associated_id : Int32?
-  getter type : String
-  getter associated_type : String
-
-  def initialize(type, associated_type, id, associated_id : Int32? = nil)
-    @type = type
-    @associated_type = associated_type
-    @id = id
-    @associated_id = associated_id || id
-  end
-
-end
-
 def is_digit?(c : String | Char)
   c.to_i
 
@@ -40,15 +27,6 @@ rescue ArgumentError
   return false
 end
 
-def get_seeds_from_seeds_line(line : String)
-  seeds = [] of Int32
-  line.split(":")[1].split(" ").each do |num|
-    next unless is_digit?(num)
-    seeds.push num.to_i
-  end
-
-  seeds
-end
 
 # returns array of "from" type and "to" type (e,g soil to fertilizer)
 def get_mapping_type_from_str(line : String)
@@ -60,7 +38,7 @@ end
 
 def process_group_mapping(type : String, associated_type : String, line : String)
   line_split = line.split(" ").map { |s| s.strip }
-  puts "working line #{line_split}"
+  # puts "working line #{line_split}"
   number_of_times = line_split[2].to_i
   current_model_type = type
   current_model_first_id = line_split[1].to_i
@@ -75,6 +53,32 @@ def process_group_mapping(type : String, associated_type : String, line : String
   end
 end
 
+struct Mapping
+  property id, associated_id
+
+  def initialize(@id : Int64, @associated_id : Int64)
+  end
+end
+
+def find_mapping_for_id(find_id : Int64, line)
+  line_split = line.split(" ").map { |s| s.strip }
+  puts "working line #{line_split}"
+  number_of_times = line_split[2].to_i
+  current_model_first_id = line_split[1].to_i
+  to_model_first_id = line_split[0].to_i
+
+  number_of_times.times do |n|
+    id = (current_model_first_id + n)
+    next unless id == find_id
+
+    associated_id = to_model_first_id + n
+
+    return Mapping.new(id: id, associated_id: associated_id)
+  end
+end
+
+
+
 # file parsing
 file = File.new(Options.file_name)
 content = file.gets_to_end
@@ -83,98 +87,68 @@ lines = content.split("\n")
 
 current_chunk = [] of String
 
-module Records
-  class_property mappings
-  class_property seed_ids
+alias ArrString = Array(String)
+############################################
+# this now only processes up through a limit like ["seed", "soil"]
+############################################
+def process_file_lines(lines, work_chunk : ArrString, find_id : Int64)
+  current_chunk = [] of String
+  lines.each do |line|
+    # skip if empty
+    next if line.chars.size == 0
 
-  TYPES = ["seed", "soil", "fertilizer", "water", "light", "temperature", "humidity", "location"]
-
-  @@seed_ids = [] of Int32
-
-  @@mappings = {
-    "seed" => Store.new("seed", "soil"),
-    "soil" => Store.new("soil", "fertilizer"),
-    "fertilizer" => Store.new("fertilizer", "water"),
-    "water" => Store.new("water", "light"),
-    "light" => Store.new("light", "temperature"),
-    "temperature" => Store.new("temperature", "humidity"),
-    "humidity" => Store.new("humidity", "location"),
-  }
-
-  class Store
-    @_internal_hash = {} of Int32 => ModelThing
-
-    def initialize(from_type : String, to_type : String)
-      @from_type = from_type
-      @to_type = to_type
-    end
-
-    def find_by_id(id : Int32)
-      rec = @_internal_hash.fetch(id) do |id|
-        puts "failed to find a corresponding record for id #{id} in the #{@from_type} store"
-        # generate a replacement
-
-        ModelThing.new(@from_type, @to_type, id)
-      end
-
-      rec
-    end
-
-    def has_an_association?
-      @to_type.present?
-    end
-
-    def save(record : ModelThing)
-      raise Exception.new("missing an id") if record.id.nil?
-      @_internal_hash[record.id.as(Int32)] = record
-    end
-
-    def inspect
-      @_internal_hash.values.map do |k|
-        k.inspect
-      end.join("\n")
+    # if current chunk is seeds, skip
+    if line.starts_with? "seeds:"
+      next
+    # set which mapping we're building if starts with char
+    elsif !is_digit?(line.chars[0])
+      current_chunk = get_mapping_type_from_str(line)
+    elsif current_chunk == work_chunk # don't continue past the limit
+      # process as a mapping if right work chunk
+      # process_group_mapping(type: current_chunk.first, associated_type: current_chunk.last, line: line)
+      mapping = find_mapping_for_id(find_id, line)
+      return mapping unless mapping.nil?
     end
   end
 end
 
-lines.each do |line|
-  # skip if empty
-  next if line.chars.size == 0
 
-  # if current chunk is seeds, special process this
-  if line.starts_with? "seeds:"
-    puts "found some seeds"
-    Records.seed_ids = get_seeds_from_seeds_line(line)
+Records.seed_ids = SeedFinder.process_file_for_seeds(lines)
 
-  # set which mapping we're building if starts with char
-  elsif !is_digit?(line.chars[0])
-    current_chunk = get_mapping_type_from_str(line)
-  else
-    # process as a mapping if starts with a number
-    process_group_mapping(type: current_chunk.first, associated_type: current_chunk.last, line: line)
-  end
-end
 puts "seeds:"
 puts Records.seed_ids
-
-
 puts "-----------------------------------------"
 
+seed_id = Records.seed_ids.first
+x = process_file_lines(lines, ["seed", "soil"], seed_id)
 
-def find_location_for_seed_id(seed_id : Int32)
-  next_piece = Records.mappings["seed"].find_by_id(seed_id)
-  until next_piece.associated_type == "location"
-    puts next_piece.inspect
-    puts "got nil associated_id on #{next_piece.inspect}!"
-    next_piece = Records.mappings[next_piece.associated_type.as(String)].find_by_id(next_piece.associated_id.as(Int32))
+def find_location_for_seed_id(seed_id, lines)
+  id : Int64 = seed_id
+  puts "very well, searching for seed_id #{seed_id}"
+
+  Records::TYPES.each.with_index do |from_type, i|
+    to_type = Records::TYPES[i + 1]
+    puts "looking for match at [#{from_type}, #{to_type}] for #{id}"
+    this_batches_found_mapping = process_file_lines(lines, [from_type, to_type], id)
+
+    if to_type == Records::TYPES.last
+      return this_batches_found_mapping.associated_id unless this_batches_found_mapping.nil?
+      return id
+    end
+    if this_batches_found_mapping.nil?
+      puts "no match on [#{from_type}, #{to_type}] from seed_id #{seed_id} currently searching #{id}, will re-use old one"
+      next
+    end
+
+    id = this_batches_found_mapping.associated_id
   end
 
-  raise Exception.new("#{next_piece.inspect} is not a humidity!") unless next_piece.type == "humidity"
-  return next_piece.associated_id
 end
 
+# puts find_location_for_seed_id(Records.seed_ids.first, lines)
 Records.seed_ids.each do |seed_id|
-  loc_id = find_location_for_seed_id(seed_id)
+  puts "\n\n"
+  loc_id = find_location_for_seed_id(seed_id, lines)
 
   puts "the location for seed #{seed_id} is location #{loc_id}"
 end

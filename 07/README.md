@@ -1,0 +1,1 @@
+execute via `crystal run entry.cr -- -f input.txt`

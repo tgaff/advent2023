@@ -1,10 +1,3 @@
-# class Card < UInt32
-#   def initialize(card_face)
-#     card_face
-#   end
-# end
-
-
 class Hand
   @cards : Array(Char)
   getter :cards
@@ -28,7 +21,6 @@ class Hand
     hand_str, bet_str = input_str.split(" ")
     @cards = hand_str.upcase.chars
     @bet = bet_str.to_u32
-
     @hand_type = check_hand_type
   end
 
@@ -40,6 +32,7 @@ class Hand
         ret_val = card_val(cards[i]).<=> card_val(other.cards[i])
         return ret_val unless ret_val == 0
       end
+      # if they were equal all the way through
       return 0
     else
       return hand_type_higher_than?(other.hand_type) ? 1 : -1

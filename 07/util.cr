@@ -3,6 +3,10 @@ require "option_parser"
 module Options
   class_property file_name
   @@file_name = ""
+
+  class_property jokers
+  @@jokers : Bool = false
+
 end
 
 def read_command_line
@@ -12,6 +16,8 @@ def read_command_line
     parser.on "-f FN", "--file=FN", "file" do |fn|
       Options.file_name = fn
     end
+
+    parser.on("-j", "--jokers", "Enable Jokers") { Options.jokers = true }
   end
 
   parser.parse

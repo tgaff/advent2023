@@ -37,8 +37,6 @@ class Hand
     else
       return hand_type_higher_than?(other.hand_type) ? 1 : -1
     end
-
-    return
   end
 
   def card_val(char)
@@ -50,7 +48,7 @@ class Hand
     when 'Q'
       12
     when 'J'
-      11
+      Options.jokers ? 0 : 11
     when 'T'
       10
     else
@@ -69,25 +67,77 @@ class Hand
 
 
   private def check_hand_type
-    h = Hash(Char, Int64).new(0)
+    j_count = 0
 
-    @cards.each { |cv| h[cv] = h[cv]+1 }
+    h = Hash(Char, Int64).new(0)
+    if Options.jokers
+      @cards.each do |cv|
+        if cv == 'J'
+          j_count += 1
+        else
+          h[cv] = h[cv]+1
+        end
+      end
+    else
+      @cards.each { |cv| h[cv] = h[cv]+1 }
+    end
 
     same_card_counts = h.values.sort.reverse
-    if same_card_counts.first == 5
-      return :five_of_a_kind
-    elsif same_card_counts.first == 4
-      return :four_of_a_kind
-    elsif same_card_counts.first == 3 && same_card_counts[1] == 2
-      return :full_house
-    elsif same_card_counts.first == 3
-      return :three_of_a_kind
-    elsif same_card_counts.first == 2
-      return :two_pair if same_card_counts[1] == 2
-      return :one_pair
+    s1 = same_card_counts.fetch(0, 1)
+    s2 = same_card_counts.fetch(1, 1)
+    puts "hand jokers #{j_count} #{@cards.join("")} '#{s1}' '#{s2}'"
+
+    res = if j_count == 0
+      if s1 == 5
+        :five_of_a_kind
+      elsif s1 == 4
+        :four_of_a_kind
+      elsif s1 == 3 && s2 == 2
+        :full_house
+      elsif s1 == 3
+        :three_of_a_kind
+      elsif s1 == 2
+        if s2 == 2
+          :two_pair
+        else
+          :one_pair
+        end
+      else
+        :high_card
+      end
+    elsif j_count >= 4
+      :five_of_a_kind
+    elsif j_count == 3
+      if s1 == 2
+        :five_of_a_kind
+      else
+        :four_of_a_kind
+      end
+    elsif j_count == 2
+      if s1 == 3
+        :five_of_a_kind
+      elsif s1 == 2
+        :four_of_a_kind
+      else
+        :three_of_a_kind
+      end
+    elsif j_count == 1
+      if s1 == 4
+        :five_of_a_kind
+      elsif s1 == 3
+        :four_of_a_kind
+      elsif s1 == 2 && s2 == 2
+        :full_house
+      elsif s1 == 2
+        :three_of_a_kind
+      else
+        :one_pair
+      end
     else
-      return :high_card
+      raise "OOPS"
     end
+
+    res
   end
 
   def to_s
